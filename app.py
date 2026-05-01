@@ -15,10 +15,11 @@ from PIL import Image, ImageDraw, ImageFont
 DEFAULT_WIDTH = 340
 DEFAULT_HEIGHT = 340
 
-# Dossier où se trouve app.py (pour retrouver template.png + DejaVuSans.ttf)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 TEMPLATE_PATH = os.path.join(BASE_DIR, "template.png")
+
+ALLOWED_EXTENSIONS = (".xlsx", ".xls")
 
 
 # -----------------------------
@@ -37,10 +38,6 @@ def safe_filename(value):
 
 
 def load_font(size, bold=False):
-    """
-    Charge une police Unicode (DejaVuSans) capable d'afficher
-    é, è, à, ç, ×, °, etc.
-    """
     if bold:
         candidates = [
             os.path.join(BASE_DIR, "DejaVuSans-Bold.ttf"),
@@ -227,8 +224,16 @@ def create_excel_template():
 def read_excel_file(uploaded_file):
     """
     Lit un fichier Excel (.xlsx ou .xls).
+    L'extension est validée ici car le filtre type= est désactivé
+    sur le file_uploader pour que le sélecteur s'ouvre correctement
+    sur iOS / Android.
     """
     filename = getattr(uploaded_file, "name", "").lower()
+
+    if not filename.endswith(ALLOWED_EXTENSIONS):
+        raise ValueError(
+            "Format non supporté. Veuillez importer un fichier Excel (.xlsx ou .xls)."
+        )
 
     if filename.endswith(".xls"):
         engine = "xlrd"
@@ -271,10 +276,6 @@ def read_excel_file(uploaded_file):
 
 
 def generate_images_and_zip(df, width, height, progress_callback=None):
-    """
-    Génère les images et le ZIP. Si un progress_callback est fourni,
-    il est appelé avec (pct: float entre 0 et 1, message: str).
-    """
     temp_dir = tempfile.mkdtemp()
     images_dir = os.path.join(temp_dir, "images")
     os.makedirs(images_dir, exist_ok=True)
@@ -309,7 +310,6 @@ def generate_images_and_zip(df, width, height, progress_callback=None):
         generated_files.append(image_path)
 
         if progress_callback:
-            # 85% du temps consacré à la génération, 15% au ZIP
             pct = 0.85 * (idx + 1) / total
             progress_callback(pct, f"Génération de l'image {idx + 1}/{total}")
 
@@ -336,10 +336,98 @@ def generate_images_and_zip(df, width, height, progress_callback=None):
 # INTERFACE STREAMLIT
 # -----------------------------
 st.set_page_config(
-    page_title="Générateur Fiches Techniques ESL",
+    page_title="Fiches Techniques ESL",
     page_icon="🏷️",
     layout="centered",
+    initial_sidebar_state="collapsed",
 )
+
+# -----------------------------
+# CSS MOBILE-FRIENDLY
+# Note : on n'utilise PAS user-scalable=no ni maximum-scale=1.0
+# car ça peut interférer avec certains pickers natifs iOS.
+# -----------------------------
+st.markdown(
+    """
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fiches ESL">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+
+    <style>
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 5rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 800px !important;
+    }
+
+    h1 {
+        font-size: 1.6rem !important;
+        line-height: 1.2 !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .stButton > button,
+    .stDownloadButton > button {
+        width: 100% !important;
+        min-height: 48px !important;
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+        padding: 0.75rem 1rem !important;
+    }
+
+    /* File uploader : on garde le style par défaut autant que possible
+       pour ne pas interférer avec le clic natif sur mobile. */
+    [data-testid="stFileUploader"] section {
+        padding: 1rem !important;
+        border-radius: 12px !important;
+    }
+
+    .stProgress > div > div > div {
+        height: 14px !important;
+        border-radius: 7px !important;
+    }
+
+    [data-testid="stDataFrame"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    [data-testid="stImage"] img {
+        max-width: 100% !important;
+        height: auto !important;
+        border-radius: 8px !important;
+    }
+
+    @media (max-width: 480px) {
+        h1 {
+            font-size: 1.35rem !important;
+        }
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        .stButton > button,
+        .stDownloadButton > button {
+            font-size: 0.95rem !important;
+            min-height: 52px !important;
+        }
+    }
+
+    /* Empêche le zoom auto iOS sur les inputs */
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # -----------------------------
 # SESSION STATE INIT
@@ -355,10 +443,6 @@ if "generated_count" not in st.session_state:
 
 
 def reset_app():
-    """
-    Callback déclenché après le clic sur le bouton de téléchargement.
-    Réinitialise l'état pour ramener la page à son état initial.
-    """
     st.session_state.uploader_key += 1
     st.session_state.zip_bytes = None
     st.session_state.preview_paths = []
@@ -368,7 +452,7 @@ def reset_app():
 # -----------------------------
 # UI
 # -----------------------------
-st.title("🏷️ Générateur de Fiches Techniques ESL")
+st.title("🏷️ Générateur Fiches Techniques ESL")
 st.write("Importez un fichier Excel contenant les colonnes : `ean`, `L1`, `L2`, ..., `L10`.")
 
 width = DEFAULT_WIDTH
@@ -385,9 +469,12 @@ st.download_button(
 
 st.divider()
 
+# IMPORTANT : pas de paramètre type=[...] !
+# Sur iOS et Android, filtrer par .xlsx/.xls empêche le sélecteur
+# de s'ouvrir correctement (rien ne se passe au clic).
+# La validation de l'extension se fait dans read_excel_file().
 uploaded_file = st.file_uploader(
-    "Importer le fichier Excel rempli",
-    type=["xlsx", "xls"],
+    "Importer le fichier Excel rempli (.xlsx ou .xls)",
     key=f"uploader_{st.session_state.uploader_key}",
 )
 
@@ -395,11 +482,10 @@ if uploaded_file is not None and st.session_state.zip_bytes is None:
     try:
         df = read_excel_file(uploaded_file)
 
-        st.success("Fichier Excel chargé avec succès.")
-        st.write("Aperçu du fichier :")
-        st.dataframe(df.head(10), use_container_width=True)
+        st.success("✅ Fichier Excel chargé avec succès.")
 
-        st.write(f"Nombre d'articles détectés : **{len(df)}**")
+        with st.expander(f"👁️ Aperçu ({len(df)} article(s) détecté(s))", expanded=False):
+            st.dataframe(df.head(10), use_container_width=True, hide_index=True)
 
         if st.button("⚙️ Générer les images"):
             progress_bar = st.progress(0.0, text="Démarrage de la génération...")
@@ -429,12 +515,12 @@ if uploaded_file is not None and st.session_state.zip_bytes is None:
 # Section résultats / téléchargement
 # -----------------------------
 if st.session_state.zip_bytes is not None:
-    st.success(f"{st.session_state.generated_count} image(s) générée(s).")
+    st.success(f"✅ {st.session_state.generated_count} image(s) générée(s).")
 
-    st.write("Aperçu des premières images :")
-    for path in st.session_state.preview_paths:
-        if os.path.exists(path):
-            st.image(path, caption=os.path.basename(path), width=250)
+    with st.expander("👁️ Aperçu des premières images", expanded=True):
+        for path in st.session_state.preview_paths:
+            if os.path.exists(path):
+                st.image(path, caption=os.path.basename(path), use_container_width=True)
 
     st.download_button(
         label="📥 Télécharger le ZIP",

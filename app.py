@@ -14,7 +14,11 @@ from PIL import Image, ImageDraw, ImageFont
 # -----------------------------
 DEFAULT_WIDTH = 340
 DEFAULT_HEIGHT = 340
-TEMPLATE_PATH = "template.png"
+
+# Dossier où se trouve app.py (pour retrouver template.png + DejaVuSans.ttf)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TEMPLATE_PATH = os.path.join(BASE_DIR, "template.png")
 
 
 # -----------------------------
@@ -34,33 +38,46 @@ def safe_filename(value):
 
 def load_font(size, bold=False):
     """
-    Police Unicode pour afficher correctement :
+    Charge une police Unicode (DejaVuSans) capable d'afficher
     é, è, à, ç, ×, °, etc.
-    """
 
+    Cherche d'abord dans le dossier du projet (à côté de app.py),
+    puis dans les emplacements système. Lève une erreur explicite
+    si rien n'est trouvé, pour éviter de retomber silencieusement
+    sur la police bitmap par défaut (qui afficherait des carrés □).
+    """
     if bold:
         candidates = [
+            os.path.join(BASE_DIR, "DejaVuSans-Bold.ttf"),
+            os.path.join(BASE_DIR, "fonts", "DejaVuSans-Bold.ttf"),
+            # fallback : police normale si la bold n'est pas dispo
+            os.path.join(BASE_DIR, "DejaVuSans.ttf"),
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "C:/Windows/Fonts/arialbd.ttf",
-            "arialbd.ttf",
         ]
     else:
         candidates = [
+            os.path.join(BASE_DIR, "DejaVuSans.ttf"),
+            os.path.join(BASE_DIR, "fonts", "DejaVuSans.ttf"),
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "C:/Windows/Fonts/arial.ttf",
-            "arial.ttf",
         ]
 
     for path in candidates:
-        try:
-            return ImageFont.truetype(path, size)
-        except Exception:
-            continue
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
 
-    # Si aucune police trouvée
-    return ImageFont.load_default()
+    raise RuntimeError(
+        "Police Unicode introuvable. Ajoutez 'DejaVuSans.ttf' "
+        "à la racine du projet (à côté de app.py)."
+    )
 
 
 def text_width(draw, text, font):
@@ -337,7 +354,7 @@ if uploaded_file is not None:
         st.write("Aperçu du fichier :")
         st.dataframe(df.head(10), use_container_width=True)
 
-        st.write(f"Nombre d’articles détectés : **{len(df)}**")
+        st.write(f"Nombre d'articles détectés : **{len(df)}**")
 
         if st.button("⚙️ Générer les images"):
             zip_path, generated_files = generate_images_and_zip(df, width, height)

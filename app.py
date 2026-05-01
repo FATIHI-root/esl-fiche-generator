@@ -33,25 +33,33 @@ def safe_filename(value):
 
 
 def load_font(size, bold=False):
+    """
+    Police Unicode pour afficher correctement :
+    é, è, à, ç, ×, °, etc.
+    """
+
     if bold:
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
             "arialbd.ttf",
-            "Arial Bold.ttf",
         ]
     else:
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "C:/Windows/Fonts/arial.ttf",
             "arial.ttf",
-            "Arial.ttf",
         ]
 
     for path in candidates:
         try:
             return ImageFont.truetype(path, size)
         except Exception:
-            pass
+            continue
 
+    # Si aucune police trouvée
     return ImageFont.load_default()
 
 
@@ -116,7 +124,8 @@ def create_base_image(width, height):
 
 def draw_lines_on_image(img, values):
     """
-    Écriture ajustée pour votre template 340x340 exact.
+    Écriture ajustée pour votre template 340x340.
+    Police plus grande + caractères spéciaux OK.
     """
     draw = ImageDraw.Draw(img)
     width, height = img.size
@@ -125,17 +134,17 @@ def draw_lines_on_image(img, values):
     text_left = 22
     text_right = 318
 
-    # La zone utile commence après le header noir
-    body_top = 55
-    body_bottom = 306
+    # Zone texte sous le header noir
+    body_top = 56
+    body_bottom = 305
 
     row_count = 10
     row_h = (body_bottom - body_top) / row_count
     max_text_width = text_right - text_left
 
-    # Taille proche de votre exemple souhaité
+    # Texte plus grand
     preferred_size = 18
-    min_size = 11
+    min_size = 13
 
     for idx in range(10):
         text = values[idx] if idx < len(values) else ""
@@ -143,6 +152,13 @@ def draw_lines_on_image(img, values):
 
         if not text:
             continue
+
+        # Nettoyage caractères
+        text = (
+            text.replace("x", "×")
+            .replace(" X ", " × ")
+            .replace("  ", " ")
+        )
 
         row_top = int(body_top + idx * row_h)
         row_bottom = int(body_top + (idx + 1) * row_h)
@@ -158,8 +174,6 @@ def draw_lines_on_image(img, values):
         )
 
         h = text_height(draw, final_text, font)
-
-        # Position verticale plus naturelle
         y = row_top + max(0, (available_h - h) // 2) - 2
 
         draw.text(

@@ -242,7 +242,25 @@ def create_excel_template():
 
 
 def read_excel_file(uploaded_file):
-    df = pd.read_excel(uploaded_file, dtype=str, keep_default_na=False)
+    """
+    Lit un fichier Excel (.xlsx ou .xls).
+    Choisit explicitement le moteur en fonction de l'extension :
+        - .xlsx -> openpyxl
+        - .xls  -> xlrd (version < 2.0 requise dans requirements.txt)
+    """
+    filename = getattr(uploaded_file, "name", "").lower()
+
+    if filename.endswith(".xls"):
+        engine = "xlrd"
+    else:
+        engine = "openpyxl"
+
+    df = pd.read_excel(
+        uploaded_file,
+        dtype=str,
+        keep_default_na=False,
+        engine=engine,
+    )
 
     df.columns = [str(c).strip() for c in df.columns]
     lower_cols = {c.lower(): c for c in df.columns}

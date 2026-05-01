@@ -116,27 +116,26 @@ def create_base_image(width, height):
 
 def draw_lines_on_image(img, values):
     """
-    Écrit le texte sur le template.
-    Les positions sont ajustées pour se rapprocher du rendu de la photo 1.
+    Écriture ajustée pour votre template 340x340 exact.
     """
     draw = ImageDraw.Draw(img)
     width, height = img.size
 
-    # Zone texte
-    text_left = int(width * 0.04)
-    text_right = int(width * 0.96)
+    # Coordonnées adaptées à votre template
+    text_left = 22
+    text_right = 318
 
-    # Zone des lignes
-    body_top = int(height * 0.12)
-    body_bottom = int(height * 0.94)
+    # La zone utile commence après le header noir
+    body_top = 55
+    body_bottom = 306
 
     row_count = 10
     row_h = (body_bottom - body_top) / row_count
     max_text_width = text_right - text_left
 
-    # Taille police proche du rendu photo 1
-    preferred_size = int(height * 0.070)   # ex: ~23 px si 340x340
-    min_size = int(height * 0.038)         # ex: ~13 px si 340x340
+    # Taille proche de votre exemple souhaité
+    preferred_size = 18
+    min_size = 11
 
     for idx in range(10):
         text = values[idx] if idx < len(values) else ""
@@ -159,12 +158,14 @@ def draw_lines_on_image(img, values):
         )
 
         h = text_height(draw, final_text, font)
-        y = row_top + max(0, (available_h - h) // 2)
+
+        # Position verticale plus naturelle
+        y = row_top + max(0, (available_h - h) // 2) - 2
 
         draw.text(
             (text_left, y),
             final_text,
-            fill=(25, 25, 25),
+            fill=(20, 20, 20),
             font=font,
         )
 

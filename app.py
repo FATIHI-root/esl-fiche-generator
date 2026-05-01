@@ -14,22 +14,15 @@ from PIL import Image, ImageDraw, ImageFont
 # -----------------------------
 DEFAULT_WIDTH = 340
 DEFAULT_HEIGHT = 340
-TITLE_TEXT = "FICHE TECHNIQUE"
-
-BG_COLOR = (239, 239, 239)
-BORDER_COLOR = (20, 20, 20)
-HEADER_COLOR = (20, 20, 20)
-TEXT_COLOR = (25, 25, 25)
-LINE_COLOR = (195, 195, 195)
+TEMPLATE_PATH = "template.png"
 
 
 # -----------------------------
-# FONCTIONS
+# OUTILS
 # -----------------------------
 def safe_filename(value):
     value = str(value).strip()
 
-    # Corrige les EAN lus comme 1234567890123.0
     if value.endswith(".0"):
         value = value[:-2]
 
@@ -103,89 +96,47 @@ def fit_font_single_line(draw, text, max_width, max_height, preferred_size, min_
     return font, text
 
 
+# -----------------------------
+# TEMPLATE IMAGE
+# -----------------------------
 def create_base_image(width, height):
-    img = Image.new("RGB", (width, height), (255, 255, 255))
-    draw = ImageDraw.Draw(img)
-
-    outer_margin = max(5, int(width * 0.025))
-    border_width = max(2, int(width * 0.006))
-    radius = max(12, int(width * 0.045))
-
-    # Fond principal
-    draw.rounded_rectangle(
-        [
-            (outer_margin, outer_margin),
-            (width - outer_margin, height - outer_margin),
-        ],
-        radius=radius,
-        fill=BG_COLOR,
-        outline=BORDER_COLOR,
-        width=border_width,
-    )
-
-    # Header noir
-    header_h = int(height * 0.125)
-
-    draw.rectangle(
-        [
-            (outer_margin + border_width, outer_margin + border_width),
-            (width - outer_margin - border_width, outer_margin + header_h),
-        ],
-        fill=HEADER_COLOR,
-    )
-
-    # Titre
-    title_font = load_font(int(height * 0.045), bold=True)
-    title_w = text_width(draw, TITLE_TEXT, title_font)
-    title_h = text_height(draw, TITLE_TEXT, title_font)
-
-    title_x = (width - title_w) // 2
-    title_y = outer_margin + (header_h - title_h) // 2 - 2
-
-    draw.text(
-        (title_x, title_y),
-        TITLE_TEXT,
-        fill=(255, 255, 255),
-        font=title_font,
-    )
-
-    # Lignes horizontales
-    body_left = int(width * 0.065)
-    body_right = int(width * 0.935)
-    body_top = int(height * 0.18)
-    body_bottom = int(height * 0.93)
-
-    row_count = 10
-    row_h = (body_bottom - body_top) / row_count
-
-    for i in range(row_count + 1):
-        y = int(body_top + i * row_h)
-        draw.line(
-            (body_left, y, body_right, y),
-            fill=LINE_COLOR,
-            width=max(1, int(width * 0.002)),
+    """
+    Utilise le vrai template image au lieu de le redessiner.
+    """
+    if not os.path.exists(TEMPLATE_PATH):
+        raise FileNotFoundError(
+            f"Le fichier template '{TEMPLATE_PATH}' est introuvable. "
+            "Ajoutez votre image vide dans le projet."
         )
 
+    img = Image.open(TEMPLATE_PATH).convert("RGB")
+    img = img.resize((width, height))
     return img
 
 
 def draw_lines_on_image(img, values):
+    """
+    Écrit le texte sur le template.
+    Les positions sont ajustées pour se rapprocher du rendu de la photo 1.
+    """
     draw = ImageDraw.Draw(img)
     width, height = img.size
 
-    text_left = int(width * 0.065)
-    text_right = int(width * 0.935)
+    # Zone texte
+    text_left = int(width * 0.04)
+    text_right = int(width * 0.96)
 
-    body_top = int(height * 0.18)
-    body_bottom = int(height * 0.93)
+    # Zone des lignes
+    body_top = int(height * 0.12)
+    body_bottom = int(height * 0.94)
 
     row_count = 10
     row_h = (body_bottom - body_top) / row_count
-
     max_text_width = text_right - text_left
 
-    preferred_size = int(height * 0.055)
-    min_size = int(height * 0.033)
+    # Taille police proche du rendu photo 1
+    preferred_size = int(height * 0.070)   # ex: ~23 px si 340x340
+    min_size = int(height * 0.038)         # ex: ~13 px si 340x340
 
     for idx in range(10):
         text = values[idx] if idx < len(values) else ""
@@ -208,62 +159,48 @@ def draw_lines_on_image(img, values):
         )
 
         h = text_height(draw, final_text, font)
-        y = row_top + max(0, (available_h - h) // 2) - 1
+        y = row_top + max(0, (available_h - h) // 2)
 
         draw.text(
             (text_left, y),
             final_text,
-            fill=TEXT_COLOR,
+            fill=(25, 25, 25),
             font=font,
         )
 
     return img
 
 
+# -----------------------------
+# EXCEL TEMPLATE
+# -----------------------------
 def create_excel_template():
     columns = ["ean"] + [f"L{i}" for i in range(1, 11)]
 
     example_data = [
         {
             "ean": "1234567890123",
-            "L1": "Volume : 300 L",
-            "L2": "Classe : A++",
-            "L3": "Couleur : Inox",
-            "L4": "Bruit : 39 dB",
-            "L5": "No Frost",
-            "L6": "Multi Air Flow",
-            "L7": "Dim. : 186x60x64 cm",
-            "L8": "Garantie : 2 ans",
-            "L9": "",
-            "L10": "",
-        },
-        {
-            "ean": "",
-            "L1": "",
-            "L2": "",
-            "L3": "",
-            "L4": "",
-            "L5": "",
-            "L6": "",
-            "L7": "",
-            "L8": "",
-            "L9": "",
-            "L10": "",
-        },
+            "L1": "VOLUME NET : 486L",
+            "L2": "VOLUME REFRIG. : 348L",
+            "L3": "VOLUME CONGEL. : 138L",
+            "L4": "CLASSE ÉNERG. : A++",
+            "L5": "CONSO. : 231Kwh/an",
+            "L6": "POUV. CONGEL. : 16kg/24h",
+            "L7": "COULEUR : INOX",
+            "L8": "NIVEAU SONORE : 35 db",
+            "L9": "DIMENSIONS : 201/75/68",
+            "L10": "GARANTIE : 2 ANS",
+        }
     ]
 
     df_template = pd.DataFrame(example_data, columns=columns)
 
     output = BytesIO()
-
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_template.to_excel(writer, index=False, sheet_name="Produits")
-
         worksheet = writer.sheets["Produits"]
 
-        # Largeur des colonnes
-        worksheet.column_dimensions["A"].width = 18
-
+        worksheet.column_dimensions["A"].width = 20
         for col in range(2, 12):
             col_letter = worksheet.cell(row=1, column=col).column_letter
             worksheet.column_dimensions[col_letter].width = 28
@@ -275,9 +212,7 @@ def create_excel_template():
 def read_excel_file(uploaded_file):
     df = pd.read_excel(uploaded_file, dtype=str, keep_default_na=False)
 
-    # Nettoyer les noms des colonnes
     df.columns = [str(c).strip() for c in df.columns]
-
     lower_cols = {c.lower(): c for c in df.columns}
 
     if "ean" not in lower_cols:
@@ -285,25 +220,20 @@ def read_excel_file(uploaded_file):
 
     df = df.rename(columns={lower_cols["ean"]: "ean"})
 
-    # Renommer L1...L10 si nécessaire
     lower_cols = {c.lower(): c for c in df.columns}
 
     for i in range(1, 11):
         col_lower = f"l{i}"
-
         if col_lower in lower_cols:
             df = df.rename(columns={lower_cols[col_lower]: f"L{i}"})
 
-    # Ajouter colonnes manquantes
     for i in range(1, 11):
         col = f"L{i}"
-
         if col not in df.columns:
             df[col] = ""
 
     df = df[["ean"] + [f"L{i}" for i in range(1, 11)]]
 
-    # Supprimer les lignes sans EAN
     df["ean"] = df["ean"].astype(str).str.strip()
     df = df[df["ean"] != ""]
 
@@ -324,9 +254,7 @@ def generate_images_and_zip(df, width, height):
         if not ean:
             continue
 
-        # Évite d’écraser si le même EAN existe plusieurs fois
         base_name = ean
-
         if base_name in used_names:
             used_names[base_name] += 1
             ean = f"{base_name}_{used_names[base_name]}"
@@ -339,7 +267,7 @@ def generate_images_and_zip(df, width, height):
         img = draw_lines_on_image(img, values)
 
         image_path = os.path.join(images_dir, f"{ean}.png")
-        img.save(image_path)
+        img.save(image_path, format="PNG")
 
         generated_files.append(image_path)
 
@@ -356,25 +284,20 @@ def generate_images_and_zip(df, width, height):
 # INTERFACE STREAMLIT
 # -----------------------------
 st.set_page_config(
-    page_title="Générateur Fiches Techniques",
+    page_title="Générateur Fiches Techniques ESL",
     page_icon="🏷️",
     layout="centered",
 )
 
 st.title("🏷️ Générateur de Fiches Techniques ESL")
+st.write("Importez un fichier Excel contenant les colonnes : `ean`, `L1`, `L2`, ..., `L10`.")
 
-st.write(
-    "Importez un fichier Excel contenant les colonnes : "
-    "`ean`, `L1`, `L2`, ..., `L10`."
-)
-
-# Dimension fixe
 width = DEFAULT_WIDTH
 height = DEFAULT_HEIGHT
 
 st.info("Dimension des images générées : 340 × 340 px")
+st.info("Le rendu dépend du fichier template.png utilisé comme modèle.")
 
-# Bouton modèle Excel
 template_excel = create_excel_template()
 
 st.download_button(
@@ -396,7 +319,6 @@ if uploaded_file is not None:
         df = read_excel_file(uploaded_file)
 
         st.success("Fichier Excel chargé avec succès.")
-
         st.write("Aperçu du fichier :")
         st.dataframe(df.head(10), use_container_width=True)
 
@@ -411,13 +333,8 @@ if uploaded_file is not None:
                 st.success(f"{len(generated_files)} image(s) générée(s).")
 
                 st.write("Aperçu des premières images :")
-
                 for file_path in generated_files[:3]:
-                    st.image(
-                        file_path,
-                        caption=os.path.basename(file_path),
-                        width=250,
-                    )
+                    st.image(file_path, caption=os.path.basename(file_path), width=250)
 
                 with open(zip_path, "rb") as f:
                     st.download_button(

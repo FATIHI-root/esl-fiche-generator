@@ -40,17 +40,11 @@ def load_font(size, bold=False):
     """
     Charge une police Unicode (DejaVuSans) capable d'afficher
     é, è, à, ç, ×, °, etc.
-
-    Cherche d'abord dans le dossier du projet (à côté de app.py),
-    puis dans les emplacements système. Lève une erreur explicite
-    si rien n'est trouvé, pour éviter de retomber silencieusement
-    sur la police bitmap par défaut (qui afficherait des carrés □).
     """
     if bold:
         candidates = [
             os.path.join(BASE_DIR, "DejaVuSans-Bold.ttf"),
             os.path.join(BASE_DIR, "fonts", "DejaVuSans-Bold.ttf"),
-            # fallback : police normale si la bold n'est pas dispo
             os.path.join(BASE_DIR, "DejaVuSans.ttf"),
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
@@ -125,9 +119,6 @@ def fit_font_single_line(draw, text, max_width, max_height, preferred_size, min_
 # TEMPLATE IMAGE
 # -----------------------------
 def create_base_image(width, height):
-    """
-    Utilise le vrai template image au lieu de le redessiner.
-    """
     if not os.path.exists(TEMPLATE_PATH):
         raise FileNotFoundError(
             f"Le fichier template '{TEMPLATE_PATH}' est introuvable. "
@@ -140,18 +131,12 @@ def create_base_image(width, height):
 
 
 def draw_lines_on_image(img, values):
-    """
-    Écriture ajustée pour votre template 340x340.
-    Police plus grande + caractères spéciaux OK.
-    """
     draw = ImageDraw.Draw(img)
     width, height = img.size
 
-    # Coordonnées adaptées à votre template
     text_left = 22
     text_right = 318
 
-    # Zone texte sous le header noir
     body_top = 56
     body_bottom = 305
 
@@ -159,7 +144,6 @@ def draw_lines_on_image(img, values):
     row_h = (body_bottom - body_top) / row_count
     max_text_width = text_right - text_left
 
-    # Texte plus grand
     preferred_size = 18
     min_size = 13
 
@@ -170,7 +154,6 @@ def draw_lines_on_image(img, values):
         if not text:
             continue
 
-        # Nettoyage caractères
         text = (
             text.replace("x", "×")
             .replace(" X ", " × ")
@@ -244,9 +227,6 @@ def create_excel_template():
 def read_excel_file(uploaded_file):
     """
     Lit un fichier Excel (.xlsx ou .xls).
-    Choisit explicitement le moteur en fonction de l'extension :
-        - .xlsx -> openpyxl
-        - .xls  -> xlrd (version < 2.0 requise dans requirements.txt)
     """
     filename = getattr(uploaded_file, "name", "").lower()
 
@@ -290,7 +270,11 @@ def read_excel_file(uploaded_file):
     return df
 
 
-def generate_images_and_zip(df, width, height):
+def generate_images_and_zip(df, width, height, progress_callback=None):
+    """
+    Génère les images et le ZIP. Si un progress_callback est fourni,
+    il est appelé avec (pct: float entre 0 et 1, message: str).
+    """
     temp_dir = tempfile.mkdtemp()
     images_dir = os.path.join(temp_dir, "images")
     os.makedirs(images_dir, exist_ok=True)
@@ -298,7 +282,10 @@ def generate_images_and_zip(df, width, height):
     generated_files = []
     used_names = {}
 
-    for _, row in df.iterrows():
+    rows = list(df.iterrows())
+    total = max(len(rows), 1)
+
+    for idx, (_, row) in enumerate(rows):
         ean = safe_filename(row["ean"])
 
         if not ean:
@@ -321,11 +308,26 @@ def generate_images_and_zip(df, width, height):
 
         generated_files.append(image_path)
 
+        if progress_callback:
+            # 85% du temps consacré à la génération, 15% au ZIP
+            pct = 0.85 * (idx + 1) / total
+            progress_callback(pct, f"Génération de l'image {idx + 1}/{total}")
+
     zip_path = os.path.join(temp_dir, "fiches_techniques.zip")
 
+    if progress_callback:
+        progress_callback(0.88, "Création du fichier ZIP...")
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for file_path in generated_files:
+        nb = max(len(generated_files), 1)
+        for i, file_path in enumerate(generated_files):
             zipf.write(file_path, arcname=os.path.basename(file_path))
+            if progress_callback:
+                pct = 0.88 + 0.12 * (i + 1) / nb
+                progress_callback(pct, f"Compression {i + 1}/{nb}")
+
+    if progress_callback:
+        progress_callback(1.0, "Terminé !")
 
     return zip_path, generated_files
 
@@ -339,14 +341,38 @@ st.set_page_config(
     layout="centered",
 )
 
+# -----------------------------
+# SESSION STATE INIT
+# -----------------------------
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
+if "zip_bytes" not in st.session_state:
+    st.session_state.zip_bytes = None
+if "preview_paths" not in st.session_state:
+    st.session_state.preview_paths = []
+if "generated_count" not in st.session_state:
+    st.session_state.generated_count = 0
+
+
+def reset_app():
+    """
+    Callback déclenché après le clic sur le bouton de téléchargement.
+    Réinitialise l'état pour ramener la page à son état initial.
+    """
+    st.session_state.uploader_key += 1
+    st.session_state.zip_bytes = None
+    st.session_state.preview_paths = []
+    st.session_state.generated_count = 0
+
+
+# -----------------------------
+# UI
+# -----------------------------
 st.title("🏷️ Générateur de Fiches Techniques ESL")
 st.write("Importez un fichier Excel contenant les colonnes : `ean`, `L1`, `L2`, ..., `L10`.")
 
 width = DEFAULT_WIDTH
 height = DEFAULT_HEIGHT
-
-st.info("Dimension des images générées : 340 × 340 px")
-st.info("Le rendu dépend du fichier template.png utilisé comme modèle.")
 
 template_excel = create_excel_template()
 
@@ -362,9 +388,10 @@ st.divider()
 uploaded_file = st.file_uploader(
     "Importer le fichier Excel rempli",
     type=["xlsx", "xls"],
+    key=f"uploader_{st.session_state.uploader_key}",
 )
 
-if uploaded_file is not None:
+if uploaded_file is not None and st.session_state.zip_bytes is None:
     try:
         df = read_excel_file(uploaded_file)
 
@@ -375,24 +402,44 @@ if uploaded_file is not None:
         st.write(f"Nombre d'articles détectés : **{len(df)}**")
 
         if st.button("⚙️ Générer les images"):
-            zip_path, generated_files = generate_images_and_zip(df, width, height)
+            progress_bar = st.progress(0.0, text="Démarrage de la génération...")
+
+            def update_progress(pct, msg):
+                progress_bar.progress(min(pct, 1.0), text=msg)
+
+            zip_path, generated_files = generate_images_and_zip(
+                df, width, height, progress_callback=update_progress
+            )
+
+            progress_bar.empty()
 
             if len(generated_files) == 0:
                 st.warning("Aucune image générée. Vérifiez que la colonne EAN est remplie.")
             else:
-                st.success(f"{len(generated_files)} image(s) générée(s).")
-
-                st.write("Aperçu des premières images :")
-                for file_path in generated_files[:3]:
-                    st.image(file_path, caption=os.path.basename(file_path), width=250)
-
                 with open(zip_path, "rb") as f:
-                    st.download_button(
-                        label="📥 Télécharger le ZIP",
-                        data=f,
-                        file_name="fiches_techniques.zip",
-                        mime="application/zip",
-                    )
+                    st.session_state.zip_bytes = f.read()
+                st.session_state.preview_paths = generated_files[:3]
+                st.session_state.generated_count = len(generated_files)
+                st.rerun()
 
     except Exception as e:
         st.error(f"Erreur : {e}")
+
+# -----------------------------
+# Section résultats / téléchargement
+# -----------------------------
+if st.session_state.zip_bytes is not None:
+    st.success(f"{st.session_state.generated_count} image(s) générée(s).")
+
+    st.write("Aperçu des premières images :")
+    for path in st.session_state.preview_paths:
+        if os.path.exists(path):
+            st.image(path, caption=os.path.basename(path), width=250)
+
+    st.download_button(
+        label="📥 Télécharger le ZIP",
+        data=st.session_state.zip_bytes,
+        file_name="fiches_techniques.zip",
+        mime="application/zip",
+        on_click=reset_app,
+    )
